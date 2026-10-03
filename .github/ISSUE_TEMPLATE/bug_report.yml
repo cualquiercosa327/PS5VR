@@ -1,0 +1,78 @@
+name: Bug report
+description: Something does not work, crashes, or looks wrong in the headset
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The details below are what make a video problem reproducible. The
+        firmware and the video's own format matter most.
+  - type: input
+    id: firmware
+    attributes:
+      label: PS5 firmware
+      description: Settings > System > System Software > Console Information
+      placeholder: "13.60"
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: PS5VR version
+      placeholder: "1.1.0"
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happens
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: dropdown
+    id: source
+    attributes:
+      label: Where the video comes from
+      options:
+        - /data/ps5vr/videos
+        - USB drive
+        - DLNA server
+        - DeoVR / HereSphere library
+        - RSS feed
+    validations:
+      required: true
+  - type: input
+    id: format
+    attributes:
+      label: Video format
+      description: Resolution, frame rate, codec and container.
+      placeholder: "7680x3840 60fps HEVC 10-bit, MP4"
+    validations:
+      required: true
+  - type: dropdown
+    id: projection
+    attributes:
+      label: Projection
+      options: ["180", "360", "Flat / 2D", "Not sure"]
+    validations:
+      required: true
+  - type: dropdown
+    id: stereo
+    attributes:
+      label: Stereo layout
+      options: ["Side by side", "Over / under", "Mono", "Not sure"]
+    validations:
+      required: true
+  - type: checkboxes
+    id: toggles
+    attributes:
+      label: Settings in use
+      options:
+        - label: Smooth motion (frame generation) on
+        - label: HDR on
+        - label: Mirror to TV on
+  - type: textarea
+    id: payloads
+    attributes:
+      label: Payloads loaded
+      description: etaHEN, kstuff, ShadowMount+, elfldr and so on, with versions.
