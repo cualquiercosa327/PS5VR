@@ -119,7 +119,12 @@ LLPC for gfx1013; their generators are in `app/tools/shaders/`.
 - `tools/ps5_dynlib.py` reads decrypted system libraries (exports, imports,
   NIDs) and `tools/gen_export_table.py` writes the export offsets the app uses.
 
-Other firmware versions need their own export table.
+Other firmware versions need their own export table, and it has to be
+generated from that firmware's own libraries: a 13.60 console cannot produce a
+12.40 table. If you are on another firmware and want it supported, see
+[docs/firmware-support.md](docs/firmware-support.md) for the three libraries
+needed and how to generate the table. Wrong-firmware tables fail safely: each
+one carries an anchor string that is checked before any offset is used.
 
 ---
 
