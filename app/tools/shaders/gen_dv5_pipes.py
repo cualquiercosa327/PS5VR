@@ -1,0 +1,223 @@
+#!/usr/bin/env python3
+# PS5VR PS5
+# Copyright (C) 2026 Husam Osman
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""Writes the Dolby Vision profile 5 video pipelines (engine/shaders/agc/*.pipe).
+
+Same vertex stage and pipeline state as the P010 HDR pipes; the fragment stage
+rebuilds the picture from the base layer and the frame's RPU parameters, which
+arrive as a third texture (binding 2): one RG16 texel per float, the float's
+bits split low/high. Layout (src/dv_rpu.h, dv_pack_texture):
+  [0..2]  ycc_to_rgb offset   [3..11] ycc_to_rgb   [12..20] LMS->RGB
+  [24 + c*218 ...] component c: num_pivots, pivots[9], then 8 pieces of 26:
+                   method (0 poly / MMR order), poly[3], mmr const, mmr[3][7]
+Compile with tools/build_agc_pipes.py (amdllpc, gfx1013).
+"""
+import os, sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+OUT = os.path.join(HERE, "..", "..", "engine", "shaders", "agc")
+
+VS = r'''#version 450
+
+layout(set = 0, binding = 0, std140) uniform VideoConstants {
+    vec2 uCrop;
+    vec2 uScale;
+} video;
+
+layout(location = 0) out vec2 vUV;
+
+void main() {
+    vec2 p = vec2(float(gl_VertexIndex & 1), float((gl_VertexIndex >> 1) & 1));
+    vUV = vec2(p.x, 1.0 - p.y) * video.uCrop;
+    gl_Position = vec4((p * 2.0 - 1.0) * video.uScale, 0.0, 1.0);
+}
+'''
+
+FS_COMMON = r'''#version 450
+
+layout(set = 1, binding = 0) uniform sampler2D uY;
+layout(set = 1, binding = 1) uniform sampler2D uUV;
+layout(set = 1, binding = 2) uniform sampler2D uDv;
+
+layout(location = 0) in vec2 vUV;
+layout(location = 0) out vec4 out_color;
+
+/* One float per RG16 texel: R = low 16 bits, G = high 16 bits. */
+float F(int i) {
+    vec2 v = texelFetch(uDv, ivec2(i, 0), 0).rg;
+    uint lo = uint(v.r * 65535.0 + 0.5);
+    uint hi = uint(v.g * 65535.0 + 0.5);
+    return uintBitsToFloat((hi << 16) | lo);
+}
+
+const int COMP0 = 24;
+const int COMP_STRIDE = 218;
+const int PIECE_STRIDE = 26;
+
+/* libplacebo pl_shader_dovi_reshape: piecewise polynomial or MMR per component */
+float reshape(int c, vec3 sig) {
+    int base = COMP0 + c * COMP_STRIDE;
+    int np = int(F(base));
+    float s = sig[c];
+    if (np < 2)
+        return s;
+    int k = 0;
+    for (int i = 1; i < np - 1; i++)
+        if (s >= F(base + 1 + i))
+            k = i;
+    int pb = base + 10 + k * PIECE_STRIDE;
+    float method = F(pb);
+    float r;
+    if (method == 0.0) {
+        r = (F(pb + 3) * s + F(pb + 2)) * s + F(pb + 1);
+    } else {
+        int order = int(method);
+        float x[7] = float[7](sig.x, sig.y, sig.z, sig.x * sig.y, sig.x * sig.z,
+                              sig.y * sig.z, sig.x * sig.y * sig.z);
+        float p[7] = x;
+        r = F(pb + 4);
+        for (int j = 0; j < order; j++) {
+            for (int t = 0; t < 7; t++)
+                r += F(pb + 5 + j * 7 + t) * p[t];
+            for (int t = 0; t < 7; t++)
+                p[t] *= x[t];
+        }
+    }
+    return clamp(r, F(base + 1), F(base + np));
+}
+
+vec3 pq_eotf(vec3 v) {   /* PQ -> linear, 1.0 = 10000 nits */
+    vec3 e = pow(max(v, 0.0), vec3(1.0 / 78.84375));
+    return pow(max(e - 0.8359375, 0.0) / (18.8515625 - 18.6875 * e), vec3(1.0 / 0.1593017578125));
+}
+
+vec3 pq_oetf(vec3 l) {
+    vec3 y = pow(max(l, 0.0), vec3(0.1593017578125));
+    return pow((0.8359375 + 18.8515625 * y) / (1.0 + 18.6875 * y), vec3(78.84375));
+}
+
+/* Base layer -> BT.2020 PQ R'G'B' (src/dv_rpu.c, dv_reconstruct) */
+vec3 dv5_pq_rgb() {
+    float y = texture(uY, vUV).r * 64.0615844;
+    vec2 uv = texture(uUV, vUV).rg * 64.0615844;
+    vec3 sig = clamp(vec3(y, uv.x, uv.y), 0.0, 1.0);
+    vec3 c = vec3(reshape(0, sig), reshape(1, sig), reshape(2, sig));
+    c -= vec3(F(0), F(1), F(2)) * (1024.0 / 1023.0);
+    mat3 nonlinear = mat3(F(3), F(6), F(9), F(4), F(7), F(10), F(5), F(8), F(11));
+    mat3 lms2rgb = mat3(F(12), F(15), F(18), F(13), F(16), F(19), F(14), F(17), F(20));
+    vec3 lms = pq_eotf(nonlinear * c);
+    return clamp(pq_oetf(lms2rgb * lms), 0.0, 1.0);
+}
+'''
+
+FS_PQ = FS_COMMON + r'''
+/* HDR10 output: the rebuilt picture is already BT.2020 PQ. */
+void main() {
+    out_color = vec4(dv5_pq_rgb(), 1.0);
+}
+'''
+
+FS_SDR = FS_COMMON + r'''
+/* SDR output: the same BT.2390 tone map as the HDR10 pipe. */
+const float SRC_PEAK = 1000.0;
+const float SDR_PEAK = 100.0;
+
+float pq_oetf1(float nits) {
+    float Y = pow(clamp(nits / 10000.0, 0.0, 1.0), 0.1593017578125);
+    return pow((0.8359375 + 18.8515625 * Y) / (1.0 + 18.6875 * Y), 78.84375);
+}
+
+float pq_to_nits(float N) {
+    float Np = pow(max(N, 0.0), 1.0 / 78.84375);
+    return 10000.0 * pow(max(Np - 0.8359375, 0.0) / (18.8515625 - 18.6875 * Np), 1.0 / 0.1593017578125);
+}
+
+float eetf(float nits) {
+    float maxLum = pq_oetf1(SRC_PEAK);
+    float e1 = min(pq_oetf1(nits) / maxLum, 1.0);
+    float maxT = pq_oetf1(SDR_PEAK) / maxLum;
+    float ks = 1.5 * maxT - 0.5;
+    float e2 = e1;
+    if (e1 > ks) {
+        float t = (e1 - ks) / (1.0 - ks);
+        float t2 = t * t, t3 = t2 * t;
+        e2 = (2.0 * t3 - 3.0 * t2 + 1.0) * ks + (t3 - 2.0 * t2 + t) * (1.0 - ks)
+           + (-2.0 * t3 + 3.0 * t2) * maxT;
+    }
+    return pq_to_nits(e2 * maxLum);
+}
+
+vec3 hdr_nits_to_sdr(vec3 nits2020) {
+    vec3 c = vec3(dot(nits2020, vec3( 1.6605, -0.5876, -0.0728)),
+                  dot(nits2020, vec3(-0.1246,  1.1329, -0.0083)),
+                  dot(nits2020, vec3(-0.0182, -0.1006,  1.1187)));
+    c = max(c, vec3(0.0));
+    float m = max(max(c.r, c.g), c.b);
+    if (m > 0.0)
+        c *= eetf(m) / m;
+    return pow(clamp(c / SDR_PEAK, 0.0, 1.0), vec3(1.0 / 2.2));
+}
+
+void main() {
+    vec3 pq = dv5_pq_rgb();
+    vec3 nits = vec3(pq_to_nits(pq.r), pq_to_nits(pq.g), pq_to_nits(pq.b));
+    out_color = vec4(hdr_nits_to_sdr(nits), 1.0);
+}
+'''
+
+TAIL = r'''
+[FsInfo]
+entryPoint = main
+
+[ResourceMapping]
+userDataNode[0].visibility = 2
+userDataNode[0].type = DescriptorTableVaPtr
+userDataNode[0].offsetInDwords = 0
+userDataNode[0].sizeInDwords = 1
+userDataNode[0].next[0].type = DescriptorConstBuffer
+userDataNode[0].next[0].offsetInDwords = 0
+userDataNode[0].next[0].sizeInDwords = 4
+userDataNode[0].next[0].set = 0
+userDataNode[0].next[0].binding = 0
+userDataNode[1].visibility = 64
+userDataNode[1].type = DescriptorTableVaPtr
+userDataNode[1].offsetInDwords = 0
+userDataNode[1].sizeInDwords = 1
+userDataNode[1].next[0].type = DescriptorCombinedTexture
+userDataNode[1].next[0].offsetInDwords = 0
+userDataNode[1].next[0].sizeInDwords = 12
+userDataNode[1].next[0].set = 1
+userDataNode[1].next[0].binding = 0
+userDataNode[1].next[1].type = DescriptorCombinedTexture
+userDataNode[1].next[1].offsetInDwords = 12
+userDataNode[1].next[1].sizeInDwords = 12
+userDataNode[1].next[1].set = 1
+userDataNode[1].next[1].binding = 1
+userDataNode[1].next[2].type = DescriptorCombinedTexture
+userDataNode[1].next[2].offsetInDwords = 24
+userDataNode[1].next[2].sizeInDwords = 12
+userDataNode[1].next[2].set = 1
+userDataNode[1].next[2].binding = 2
+
+[GraphicsPipelineState]
+topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
+nggState.enableNgg = 1
+nggState.enableGsUse = 0
+; R8G8B8A8 because the shader exports plain RGBA; the BGRA ordering the scanout
+; wants is done by COMP_SWAP=ALT in CB_COLOR0_INFO (see eng_agc_runtime.c).
+colorBuffer[0].format = VK_FORMAT_R8G8B8A8_UNORM
+colorBuffer[0].channelWriteMask = 15
+colorBuffer[0].blendEnable = 0
+'''
+
+def write(name, title, fs):
+    text = ("; %s - %s\n; Generated by tools/shaders/gen_dv5_pipes.py. Edit the generator, not this file.\n\n"
+            "[Version]\nversion = 65\n\n[VsGlsl]\n%s\n[VsInfo]\nentryPoint = main\n\n[FsGlsl]\n%s%s"
+            % (name, title, VS, fs, TAIL))
+    path = os.path.join(OUT, name + ".pipe")
+    open(path, "w").write(text)
+    print("wrote", os.path.relpath(path))
+
+write("video_yuv_p010_dv5", "Dolby Vision profile 5 -> SDR (reshaped, BT.2390 tone map)", FS_SDR)
+write("video_yuv_p010_dv5_pq_out", "Dolby Vision profile 5 -> HDR10 PQ (reshaped)", FS_PQ)

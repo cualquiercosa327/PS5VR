@@ -1,0 +1,3 @@
+ic_player_*.svg: player icons from an open-source GPL-3.0 TV media app.
+ic_ui_*.svg: Material Design icons by Google, Apache License 2.0
+(https://github.com/google/material-design-icons).

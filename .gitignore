@@ -1,0 +1,8 @@
+build-mac/
+build*/
+*.o
+*.elf
+.DS_Store
+app/tools/preview/build/
+app/tools/preview/out/
+app/tools/preview/vr_ui_preview
