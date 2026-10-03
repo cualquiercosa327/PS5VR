@@ -409,7 +409,12 @@ int VrLibrary::input(const app_input_state &in, std::string &url, std::string &t
             vr = e.vr;
             return 1;
         }
-        if (e.kind == SRC_HANDS) {
+        if (e.kind == SRC_MIRROR) {
+            vr_settings().tv_mirror = !vr_settings().tv_mirror;
+            vr_prefs_set_mirror(vr_settings().tv_mirror);
+            app_vr_set_mirror(vr_settings().tv_mirror);
+            m_items[m_focus].detail = vr_settings().tv_mirror ? "On" : "Off";
+        } else if (e.kind == SRC_HANDS) {
             vr_settings().hand_tracking = !vr_settings().hand_tracking;
             vr_prefs_set_hands(vr_settings().hand_tracking);
             vr_hands_request(vr_settings().hand_tracking);
@@ -650,6 +655,7 @@ void VrMenu::input(const app_input_state &in)
         break;
     case ROW_MIRROR:
         s.tv_mirror = !s.tv_mirror;
+        vr_prefs_set_mirror(s.tv_mirror);
         app_vr_set_mirror(s.tv_mirror);
         break;
     case ROW_HANDS:

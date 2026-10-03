@@ -61,6 +61,8 @@ bool vr_src_list(const VrSrc &where, std::vector<VrSrc> &out, std::string &)
 bool vr_src_resolve(const VrSrc &, VrSrc &, std::string &) { return false; }
 bool vr_prefs_hands(void) { return false; }
 bool vr_prefs_hdr(void) { return false; }
+bool vr_prefs_mirror(void) { return false; }
+void vr_prefs_set_mirror(bool) {}
 void vr_prefs_set_hdr(bool) {}
 void vr_prefs_set_hands(bool) {}
 

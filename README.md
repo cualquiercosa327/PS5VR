@@ -20,13 +20,13 @@ PS VR2 compositor, at 120 Hz.
 - Hardware HEVC (8 and 10-bit) and H.264 decoding, up to 8K (7680x3840)
 - 120 Hz headset output with an even frame cadence (60 fps pictures show for
   two refreshes, 30 fps for four)
-- Smooth motion (coming in the next update): 8K60 decodes at 30 fps on the
-  PS5, and frame generation makes the picture in between, so the headset
-  gets 60. In 1.0.0, 8K60 plays at a steady 30 fps, in sync
+- Smooth motion: 8K60 decodes at 30 fps on the PS5, so frame generation
+  (motion estimation on the GPU) makes the picture in between - the headset
+  gets ~55-60 pictures a second instead of 30. On by default, in the View menu
 - 10-bit eye buffers, 4096 px per eye, FSR 1 upscaling and sharpening for
   pictures thinner than the panel
-- HDR (experimental, coming in the next update): HDR10 and HLG keep their
-  highlights above SDR white. In 1.0.0 HDR videos are tone-mapped to SDR
+- HDR (experimental, off by default): HDR10 and HLG keep their highlights
+  above SDR white in float eye buffers instead of being tone-mapped to SDR
 
 **Formats**
 - 360° and 180° (equirectangular), mono, side-by-side or top-bottom

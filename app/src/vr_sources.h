@@ -23,6 +23,7 @@ enum VrSrcKind {
     SRC_PLAY,        /* a playable item: url (+ vr format) */
     SRC_INFO,        /* a line of information, not selectable */
     SRC_HANDS,       /* the hands & eyes switch */
+    SRC_MIRROR,      /* the mirror-to-TV switch */
 };
 
 struct VrSrc {
@@ -43,6 +44,8 @@ void vr_prefs_set_hands(bool on);
 /* HDR in the headset (experimental): RGBA16F eye buffers. */
 bool vr_prefs_hdr(void);
 void vr_prefs_set_hdr(bool on);
+bool vr_prefs_mirror(void);
+void vr_prefs_set_mirror(bool on);
 
 /* The settings (sites, feeds, Real-Debrid token) in /data/ps5vr/config.json,
  * edited from a phone or computer at http://<console>:<port>/. */

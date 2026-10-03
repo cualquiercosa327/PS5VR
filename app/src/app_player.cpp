@@ -966,7 +966,8 @@ static bool vr_frame(Session &s, bool have, const pp_video_frame &f, int64_t pts
      * time saved goes to the decoder, which shares the GPU. */
     static int s_idle_slots;
     const bool changed = (have && pts != s.last_pts) || panel_changed;
-    if (!changed && s_idle_slots < 1 && eng_agc_vr_has_picture()) {
+    /* (frame generation: the slot after a generated picture shows the real one) */
+    if (!changed && s_idle_slots < 1 && eng_agc_vr_has_picture() && !eng_agc_vr_fg_pending()) {
         s_idle_slots++;
         return true;
     }

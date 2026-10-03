@@ -397,6 +397,8 @@ int  eng_agc_vr_read_eye(uint32_t *bgra, int shrink, int left_only, int *out_w, 
 int  eng_agc_vr_draw(void);
 /* Frame generation for 30 fps pictures (on by default). */
 void eng_agc_vr_set_framegen(int on);
+/* A generated picture is showing: the real frame needs the next slot. */
+int  eng_agc_vr_fg_pending(void);
 /* The TV VideoOut port. */
 int  eng_agc_runtime_video_handle(void);
 /* 1 once a picture has been drawn into the source surface. */

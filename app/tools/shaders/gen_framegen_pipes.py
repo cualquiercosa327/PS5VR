@@ -11,8 +11,8 @@ shows a new picture every 60 Hz slot:
   fg_down       a 4x4 box of luma -> one texel (RGB or luma in, luma out);
                 run twice per frame: 1/4 size, then 1/16
   fg_me_coarse  block matching at 1/16 size: each texel is a 4x4 block of the
-                newer frame, searched +-8 texels in the older one
-  fg_me_refine  the same at 1/4 size, +-2 texels around the coarse vector (and
+                newer frame, searched +-6 texels in the older one
+  fg_me_refine  the same at 1/4 size, +-1 texel around the coarse vector (and
                 its neighbours' and zero), so 4x4 blocks of 1/4 size = 16x16
                 pixels get a vector
   fg_interp     the picture halfway: the older frame half a vector back, the
@@ -97,8 +97,8 @@ void main() {
     ivec2 b = min(ivec2(vUV * vec2(size / 4)) * 4, size - 4);
     ivec2 best = ivec2(0);
     float bs = sad(b, ivec2(0), lim);
-    for (int y = -8; y <= 8; y++)
-        for (int x = -8; x <= 8; x++) {
+    for (int y = -6; y <= 6; y++)
+        for (int x = -6; x <= 6; x++) {
             /* a little bias towards no motion keeps flat areas still */
             float s = sad(b, ivec2(x, y), lim) + 0.004 * float(abs(x) + abs(y));
             if (s < bs) { bs = s; best = ivec2(x, y); }
@@ -122,7 +122,7 @@ void main() {
     for (int ny = -1; ny <= 1; ny++)
         for (int nx = -1; nx <= 1; nx++) {
             ivec2 c = ivec2(round(texelFetch(uIn2, clamp(cg + ivec2(nx, ny), ivec2(0), cs - 1), 0).xy * 4.0));
-            int r = (nx == 0 && ny == 0) ? 2 : 0;
+            int r = (nx == 0 && ny == 0) ? 1 : 0;
             for (int y = -r; y <= r; y++)
                 for (int x = -r; x <= r; x++) {
                     ivec2 d = c + ivec2(x, y);
@@ -213,6 +213,6 @@ colorBuffer[0].blendEnable = 0
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
     write_pipe("fg_down", DOWN, 1, RGBA16F, "4x4 luma box downscale")
-    write_pipe("fg_me_coarse", ME_COARSE, 2, RGBA16F, "block matching, 1/16 size, +-8")
-    write_pipe("fg_me_refine", ME_REFINE, 3, RGBA16F, "block matching, 1/4 size, +-2 around coarse")
+    write_pipe("fg_me_coarse", ME_COARSE, 2, RGBA16F, "block matching, 1/16 size, +-6")
+    write_pipe("fg_me_refine", ME_REFINE, 3, RGBA16F, "block matching, 1/4 size, +-1 around coarse")
     write_pipe("fg_interp", INTERP, 3, RGBA8, "the picture halfway between two frames")

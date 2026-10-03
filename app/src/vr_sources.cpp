@@ -649,7 +649,7 @@ static bool mounted(const char *path)
 
 /* Choices made in the headset, kept in /data/ps5vr/prefs.json. */
 #define PS5VR_PREFS PS5VR_DIR "/prefs.json"
-static int s_prefs_loaded, s_prefs_hands, s_prefs_hdr;
+static int s_prefs_loaded, s_prefs_hands, s_prefs_hdr, s_prefs_mirror;
 
 static void prefs_load(void)
 {
@@ -663,6 +663,7 @@ static void prefs_load(void)
         if (cJSON *j = cJSON_Parse(b)) {
             s_prefs_hands = cJSON_IsTrue(cJSON_GetObjectItem(j, "handsEyes"));
             s_prefs_hdr = cJSON_IsTrue(cJSON_GetObjectItem(j, "hdr"));
+            s_prefs_mirror = cJSON_IsTrue(cJSON_GetObjectItem(j, "mirror"));
             cJSON_Delete(j);
         }
     }
@@ -672,8 +673,8 @@ static void prefs_save(void)
 {
     mkdir(PS5VR_DIR, 0777);
     if (FILE *f = std::fopen(PS5VR_PREFS, "wb")) {
-        std::fprintf(f, "{\"handsEyes\":%s,\"hdr\":%s}\n", s_prefs_hands ? "true" : "false",
-                     s_prefs_hdr ? "true" : "false");
+        std::fprintf(f, "{\"handsEyes\":%s,\"hdr\":%s,\"mirror\":%s}\n", s_prefs_hands ? "true" : "false",
+                     s_prefs_hdr ? "true" : "false", s_prefs_mirror ? "true" : "false");
         std::fclose(f);
     }
 }
@@ -682,6 +683,8 @@ bool vr_prefs_hands(void) { prefs_load(); return s_prefs_hands; }
 void vr_prefs_set_hands(bool on) { prefs_load(); s_prefs_hands = on; prefs_save(); }
 bool vr_prefs_hdr(void) { prefs_load(); return s_prefs_hdr; }
 void vr_prefs_set_hdr(bool on) { prefs_load(); s_prefs_hdr = on; prefs_save(); }
+bool vr_prefs_mirror(void) { prefs_load(); return s_prefs_mirror; }
+void vr_prefs_set_mirror(bool on) { prefs_load(); s_prefs_mirror = on; prefs_save(); }
 
 bool vr_src_list(const VrSrc &where, std::vector<VrSrc> &out, std::string &err)
 {
@@ -719,9 +722,11 @@ bool vr_src_list(const VrSrc &where, std::vector<VrSrc> &out, std::string &err)
         for (const auto &s : c.sites)
             add(SRC_SITE, s.first, s.second, heresphere_url(s.second) ? "HereSphere" : "DeoVR");
         const std::string ip = vr_console_ip();
+        add(SRC_MIRROR, "Mirror to TV", "", vr_prefs_mirror() ? "On" : "Off");
         add(SRC_HANDS, "Hands & eyes (experimental)", "", vr_prefs_hands() ? "On" : "Off");
         add(SRC_INFO, "Settings", "", "http://" + ip + ":" +
                                        std::to_string(vr_settings_server_port()));
+        add(SRC_INFO, "Support PS5VR", "", "buymeacoffee.com/theghostonline");
         return true;
     }
     case SRC_DIR:
@@ -957,7 +962,10 @@ void serve(int fd)
                 "</textarea><small>One per line: <code>Name | URL</code>. Items with a video enclosure are listed.</small>"
                 "<label>Real-Debrid API token</label><input name=rd value='" + html_escape(c.rd_token) +
                 "' placeholder='from real-debrid.com/apitoken'><small>Lists your Real-Debrid downloads.</small>"
-                "<button>Save</button></form></body></html>";
+                "<button>Save</button></form>"
+                "<p style='margin-top:3em;color:#6b7a96;font-size:.9em'>PS5VR is free. If you enjoy it, you can "
+                "<a style='color:#93a3c0' href='https://buymeacoffee.com/theghostonline'>support it here</a>.</p>"
+                "</body></html>";
         reply = "HTTP/1.0 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: " +
                 std::to_string(page.size()) + "\r\nConnection: close\r\n\r\n" + page;
     }

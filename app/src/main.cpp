@@ -17,6 +17,7 @@
 #include "ui_text.h"
 #include "vr_ui.h"
 #include "vr_system.h"
+#include "donate_qr.h"
 
 #include <string>
 #include <ctime>
@@ -258,6 +259,20 @@ void draw_home(const char *line)
     ui_text_draw_aligned(&c, UI_BOLD, 136.0f, 960, 410, 1, UI_WHITE, "VR", 0);
     ui_text_draw_aligned(&c, UI_BOLD, 64.0f, 960, 600, 1, UI_WHITE, "PS5VR", 0);
     ui_text_draw_aligned(&c, UI_MEDIUM, 36.0f, 960, 760, 1, UI_RGBA(120, 200, 255, 255), line, 0);
+    /* Optional support, out of the way: a small, dimmed QR code in the corner
+     * (buymeacoffee.com/theghostonline). Light card so phones can read it. */
+    {
+        const int m = 4, q = 2;                     /* module px, quiet modules */
+        const int side = (kDonateQrSize + 2 * q) * m;
+        const int x0 = 1920 - 72 - side, y0 = 1080 - 112 - side;
+        ui_fill_rrect(&c, x0, y0, side, side, 8, UI_RGBA(200, 208, 222, 255));
+        for (int y = 0; y < kDonateQrSize; y++)
+            for (int x = 0; x < kDonateQrSize; x++)
+                if (kDonateQr[y][x] == '1')
+                    ui_fill_rect(&c, x0 + (q + x) * m, y0 + (q + y) * m, m, m, UI_RGBA(10, 14, 28, 255));
+        ui_text_draw_aligned(&c, UI_MEDIUM, 24.0f, x0 + side / 2.0f, y0 + side + 36, 1,
+                             UI_RGBA(120, 132, 155, 255), "Support PS5VR", 0);
+    }
     eng_agc_runtime_frame_begin();
     eng_agc_runtime_clear_black();
     eng_agc_composite_overlay(1, c.px, 1920, 1080, 1, 1.0f);
@@ -292,6 +307,8 @@ int main()
     VrHandPointer hand;
     bool hands_asked = false;
     vr_settings().hand_tracking = vr_prefs_hands();
+    vr_settings().tv_mirror = vr_prefs_mirror();
+    app_vr_set_mirror(vr_settings().tv_mirror);        /* applied when the session starts */
     if (vr_prefs_hdr()) {                           /* HDR (experimental): float eye buffers */
         app_vr_options o;
         app_vr_get_options(&o);

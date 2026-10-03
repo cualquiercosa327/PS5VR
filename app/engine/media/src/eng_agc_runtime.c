@@ -4552,6 +4552,11 @@ void eng_agc_vr_set_framegen(int on)
     s_vr.fg_on = on != 0;
 }
 
+int eng_agc_vr_fg_pending(void)
+{
+    return s_vr.fg_pending;
+}
+
 /*
  * Sharpening, with the FSR 1 passes the upscaler already compiled: a picture
  * thinner than the eye buffer (a 4K 360 has ~11 px per degree against ~17 at
